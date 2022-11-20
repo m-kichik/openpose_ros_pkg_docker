@@ -1,0 +1,5 @@
+#request constants
+string str
+---
+#response constants
+uint32 an_integer
