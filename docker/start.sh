@@ -22,7 +22,7 @@ else
     exit
 fi
 
-xhost +local:
+# xhost +local:
 docker run -it -d --rm \
         $ARGS \
         --env="DISPLAY=$DISPLAY" \
@@ -33,4 +33,4 @@ docker run -it -d --rm \
         -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
         -v `pwd`/../openpose_pkg:/home/docker_openpose/catkin_ws/src/openpose_pkg:rw \
         ${ARCH}noetic/openpose:latest
-xhost -
+# xhost -

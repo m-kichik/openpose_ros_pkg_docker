@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# command: rosrun openpose_pkg openpose_node.py --net_resolution "384x192" --topic zednode
+
 # From Python
 # It requires OpenCV installed for Python
 import sys
@@ -8,13 +10,13 @@ import os
 from sys import platform
 
 import rospy
+import message_filters
 import cv2
 import numpy as np
 
 from cv_bridge import CvBridge
 from std_msgs.msg import String
-from sensor_msgs.msg import Image
-from openpose_pkg.srv import MyDepth
+from sensor_msgs.msg import Image, CameraInfo
 
 import argparse
 import time
@@ -26,93 +28,121 @@ from openpose import pyopenpose as op
 
 
 class OpenPoseNode():
-    def __init__(self, params, no_display):
+    def __init__(self, params, topic='zednode'):
         rospy.init_node('openpose_node')
 
         self.opWrapper = op.WrapperPython()
         self.opWrapper.configure(params)
         self.opWrapper.start()
-        self.no_display = no_display
+        topic_names = {
+            'zednode' : {
+                'img'        : '/zed_node/left_raw/image_raw_color',
+                'depth'      : '/zed_node/depth/camera_info',
+                'depth_info' : '/zed_node/depth/camera_info',
+            },
+            'gripper' : {
+                'img'        : '/realsense_gripper/color/image_raw',
+                'depth'      : '/realsense_gripper/aligned_depth_to_color/image_raw',
+                'depth_info' : '/realsense_gripper/depth/camera_info',
+            },
+            'back' : {
+                'img'        : '/realsense_back/color/image_raw',
+                'depth'      : '/realsense_back/aligned_depth_to_color/image_raw',
+                'depth_info' : '/realsense_back/depth/camera_info',
+            }
+        }
+        self.topic = topic_names[topic]
+
         rospy.loginfo('OpenPose predictor is ready')
 
         # self.predictor = Predictor(weights_path)
         self.bridge = CvBridge()
-        self.img_subscriber = rospy.Subscriber('pose_detection_images', Image, self.predict_pose, queue_size=10)
+
+        self.img_subscriber = message_filters.Subscriber(
+            self.topic['img'], Image
+            )
+
+        self.depth_subscriber = message_filters.Subscriber(
+            self.topic['depth'], Image
+            )
+
+        self.depth_info_subscriber = message_filters.Subscriber(
+            self.topic['depth_info'], CameraInfo
+            )
+
+        self.syncronizer = message_filters.TimeSynchronizer(
+            [self.img_subscriber, self.depth_subscriber, self.depth_info_subscriber], 10
+            )
+
+        self.syncronizer.registerCallback(self.predict_pose)
+
+        # self.img_subscriber = rospy.Subscriber(
+        #     '/zed_node/left_raw/image_raw_color', Image, 
+        #     self.predict_pose, queue_size=10
+        #     )
+
         self.det_publisher = rospy.Publisher('detection', String, queue_size=10)
-        self.depth_client = rospy.ServiceProxy('depth_matrix', MyDepth)
-        try:
-            resp = self.depth_client('send matrix!')
-        except:
-            pass
-            # print("Service call failed: %s"%e)
+
+        self.det_img_publisher = rospy.Publisher('img_detection', Image, queue_size=10)
 
         rospy.loginfo('OpenPose node is done')
 
-    def calculate_3d(self, px_point):
-        depth_msg = self.depth_client('send matrix!')
-        depth = depth_msg.an_integer
-        K = [
-            [1, 0, 2],
-            [0, 3, 4],
-            [0, 0, 1]
-            ]
-        cx, cy = K[0][2], K[1][2]
-        fx, fy = K[0][0], K[1][1]
-        x = depth*(px_point[0] - cx)/fx
-        y = depth*(px_point[1] - cy)/fy
-        z = depth
+    def calculate_3d(self, px_point, depth, K):
+
+        depth_p = depth[int(px_point[1])][int(px_point[0])]
+        cx, cy = K[2], K[5]
+        fx, fy = K[0], K[4]
+        x = depth_p*(px_point[0] - cx)/fx
+        y = depth_p*(px_point[1] - cy)/fy
+        z = depth_p
 
         return x, y, z
 
 
-    def predict_pose(self, image_msg: Image):
+    def predict_pose(self, image_msg: Image, depth_msg: Image, depth_info_msg: CameraInfo):
         rospy.loginfo('Received image')
         current_time = time.time()
         image = self.bridge.imgmsg_to_cv2(image_msg, 'rgb8')
         # image = np.frombuffer(image_msg.data, dtype=np.uint8).reshape(image_msg.height, image_msg.width, -1)
-        # current_time = time.time()
         
         datum = op.Datum()
-        # imageToProcess = cv2.imread(imagePath)
         datum.cvInputData = image
         self.opWrapper.emplaceAndPop(op.VectorDatum([datum]))
 
-        if not self.no_display:
-            cv2.imshow("OpenPose 1.7.0", datum.cvOutputData)
-            key = cv2.waitKey(15)
-            # if key == 27: break
+        depth = self.bridge.imgmsg_to_cv2(depth_msg)
 
         keypoints = datum.poseKeypoints
-        n_people = keypoints.shape[0]
+        if keypoints is not None:
+            n_people = keypoints.shape[0]
 
-        for kp in keypoints:
-            left_hand_px = (kp[4][0], kp[4][1])
-            right_hand_px =  (kp[7][0], kp[7][1])
+            for kp in keypoints:
+                left_hand_px = (kp[4][0], kp[4][1])
+                right_hand_px =  (kp[7][0], kp[7][1])
 
-            left_hand_3d = self.calculate_3d(left_hand_px)
-            right_hand_3d = self.calculate_3d(right_hand_px)
+                left_hand_3d = self.calculate_3d(left_hand_px, depth, depth_info_msg.K)
+                right_hand_3d = self.calculate_3d(right_hand_px, depth, depth_info_msg.K)
 
-            print(f'right hand : {right_hand_3d}\n',
-                  f'left hand  : {left_hand_3d}')
+                print(f' right hand : {right_hand_3d}\n',
+                      f'left hand  : {left_hand_3d}')
+        else:
+            n_people = 0
 
+        # passed_time = time.time() - current_time
+        self.det_img_publisher.publish(self.bridge.cv2_to_imgmsg(datum.cvOutputData, 'rgb8'))
+        self.det_publisher.publish(f'Detected {n_people} people')
         passed_time = time.time() - current_time
         rospy.loginfo(f'Detected {n_people} people, this took {passed_time} seconds')
-        self.det_publisher.publish(f'Detected {n_people} people')
 
 
 if __name__ == '__main__':
     try:
         parser = argparse.ArgumentParser()
-        parser.add_argument("--image_dir", default="/home/openpose/examples/media/", 
-                                help="Process a directory of images. Read all standard formats (jpg, png, bmp, etc.).")
-        parser.add_argument("--no_display", default=False, 
-                                help="Enable to disable the visual display.")
+        parser.add_argument('--topic', default='zednode',
+                help='define name of camera topic for following cameras: zednode, gripper or back')
         args = parser.parse_known_args()
 
         params = dict()
         params["model_folder"] = "/home/openpose/models/"
-        # params["net_resolution"] = "-512x256"
-        params["net_resolution"] = "-128x64"
 
         for i in range(0, len(args[1])):
             curr_item = args[1][i]
@@ -125,7 +155,7 @@ if __name__ == '__main__':
                 key = curr_item.replace('-','')
                 if key not in params: params[key] = next_item
 
-        openpose_node = OpenPoseNode(params, args[0].no_display)
+        openpose_node = OpenPoseNode(params, args[0].topic)
         rospy.spin()
     except rospy.ROSInterruptException:
         pass

@@ -65,6 +65,9 @@ RUN git clone https://github.com/CMU-Perceptual-Computing-Lab/openpose.git .
 WORKDIR /home/openpose/build
 RUN cmake -DBUILD_PYTHON=ON -DUSE_CUDNN=OFF .. && make -j `nproc`
 
+#ros message filters
+RUN apt-get install ros-noetic-message-filters
+
 # add user and his password
 ARG USER=docker_openpose
 ARG UID=1000
