@@ -56,12 +56,11 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate services in the 'srv' folder
- add_service_files(
-   FILES
-   MyDepth.srv
+# add_service_files(
+#   FILES
 #   Service1.srv
 #   Service2.srv
- )
+# )
 
 ## Generate actions in the 'action' folder
 # add_action_files(
@@ -165,7 +164,6 @@ include_directories(
 ## in contrast to setup.py, you can choose the destination
  catkin_install_python(PROGRAMS
    scripts/openpose_node.py
-   scripts/test_server.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
  )
 
