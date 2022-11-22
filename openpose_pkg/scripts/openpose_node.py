@@ -36,8 +36,8 @@ class OpenPoseNode():
         self.opWrapper.start()
         topic_names = {
             'zednode' : {
-                'img'        : '/zed_node/left_raw/image_raw_color',
-                'depth'      : '/zed_node/depth/camera_info',
+                'img'        : '/zed_node/left/image_rect_color',
+                'depth'      : '/zed_node/depth/depth_registered',
                 'depth_info' : '/zed_node/depth/camera_info',
             },
             'gripper' : {
@@ -51,11 +51,47 @@ class OpenPoseNode():
                 'depth_info' : '/realsense_back/depth/camera_info',
             }
         }
+        
         self.topic = topic_names[topic]
+
+        self.points_dict = {
+                    0 : "Nose",
+                    1 : "Neck",
+                    2 : "RShoulder",
+                    3 : "RElbow",
+                    4 : "RWrist",
+                    5 : "LShoulder",
+                    6 : "LElbow",
+                    7 : "LWrist",
+                    8 : "MidHip",
+                    9 : "RHip",
+                    10: "RKnee",
+                    11: "RAnkle",
+                    12: "LHip",
+                    13: "LKnee",
+                    14: "LAnkle",
+                    15: "REye",
+                    16: "LEye",
+                    17: "REar",
+                    18: "LEar",
+                    19: "LBigToe",
+                    20: "LSmallToe",
+                    21: "LHeel",
+                    22: "RBigToe",
+                    23: "RSmallToe",
+                    24: "RHeel",
+
+                }
+        
+        self.important_points = [0, 1, 2, 5, 15, 16, 17, 18]
 
         rospy.loginfo('OpenPose predictor is ready')
 
-        # self.predictor = Predictor(weights_path)
+        # d_1 - for one human who is too close
+        # d_2 - for two and more people when all of them are too close
+        self.distance_1 = 1.
+        self.distance_2 = 2.
+
         self.bridge = CvBridge()
 
         self.img_subscriber = message_filters.Subscriber(
@@ -81,27 +117,42 @@ class OpenPoseNode():
         #     self.predict_pose, queue_size=10
         #     )
 
-        self.det_publisher = rospy.Publisher('detection', String, queue_size=10)
+        self.det_publisher = rospy.Publisher('openpose/detection', String, queue_size=10)
 
-        self.det_img_publisher = rospy.Publisher('img_detection', Image, queue_size=10)
+        self.det_img_publisher = rospy.Publisher('openpose/img_detection', Image, queue_size=10)
+
+        self.close_people_publisher = rospy.Publisher('openpose/close_people', Int16, queue_size=10)
 
         rospy.loginfo('OpenPose node is done')
 
     def calculate_3d(self, px_point, depth, K):
 
-        depth_p = depth[int(px_point[1])][int(px_point[0])]
-        cx, cy = K[2], K[5]
-        fx, fy = K[0], K[4]
-        x = depth_p*(px_point[0] - cx)/fx
-        y = depth_p*(px_point[1] - cy)/fy
-        z = depth_p
+        px_x, px_y = px_point
 
-        return x, y, z
+        x_size = depth.shape[1]
+        y_size = depth.shape[0]
+
+        if 0 <= px_x <= x_size and 0 <= px_y <= y_size:
+            depth_p = depth[int(px_y)][int(px_x)]
+
+            if not np.isnan(depth_p):
+                cx, cy = K[2], K[5]
+                fx, fy = K[0], K[4]
+                x = depth_p*(px_point[0] - cx)/fx
+                y = depth_p*(px_point[1] - cy)/fy
+                z = depth_p
+
+                return x, y, z
+            else:
+                return 0, 0, 0
+        else:
+            return 0, 0, 0
 
 
     def predict_pose(self, image_msg: Image, depth_msg: Image, depth_info_msg: CameraInfo):
         rospy.loginfo('Received image')
         current_time = time.time()
+
         image = self.bridge.imgmsg_to_cv2(image_msg, 'rgb8')
         # image = np.frombuffer(image_msg.data, dtype=np.uint8).reshape(image_msg.height, image_msg.width, -1)
         
@@ -112,20 +163,59 @@ class OpenPoseNode():
         depth = self.bridge.imgmsg_to_cv2(depth_msg)
 
         keypoints = datum.poseKeypoints
+
+        # what happens in the following part:
+        # for each person for each point we calculate its 3d coordinates
+        # then we filter z-coordinate for "important points" - head and shoulders,
+        # and when someone is closer to the camera than max(d1, d2) we add his (maybe her) 
+        # average depth to the list "close people dists";
+        # then we find out if there are more than one person in "close peoples" and publish code 2;
+        # if there was only one person compare his (or her) distance with d1 and maybe publish code 1;
+        # if nobody is too close we publish code 0.
+
+        keypoints_3d = []
+
+        close_people_dists = []
+
         if keypoints is not None:
             n_people = keypoints.shape[0]
 
             for kp in keypoints:
-                left_hand_px = (kp[4][0], kp[4][1])
-                right_hand_px =  (kp[7][0], kp[7][1])
 
-                left_hand_3d = self.calculate_3d(left_hand_px, depth, depth_info_msg.K)
-                right_hand_3d = self.calculate_3d(right_hand_px, depth, depth_info_msg.K)
+                pose_3d = dict.fromkeys(self.points_dict.keys())
 
-                print(f' right hand : {right_hand_3d}\n',
-                      f'left hand  : {left_hand_3d}')
+                for k in self.points_dict.keys():
+                    pose_3d[k] = self.calculate_3d(
+                        (kp[k][0], kp[k][1]), depth, depth_info_msg.K
+                    )
+
+                keypoints_3d.append(pose_3d)
+
+                important_depths = [pose_3d[x][2] for x in self.important_points]
+                important_depths = [x for x in important_depths if x > 0]
+                sum_depth = sum(important_depths)
+
+                if sum_depth != 0:
+                    av_depth = sum_depth / len(important_depths)
+                else:
+                    av_depth = 1000
+
+                if av_depth <= max(self.distance_1, self.distance_2):
+                    close_people_dists.append(av_depth)
+
+                # print(pose_3d)
+
         else:
             n_people = 0
+
+        if len(close_people_dists) > 1:
+            self.close_people_publisher.publish(2)
+        else:
+            if len(close_people_dists) == 1:
+                if close_people_dists[0] <= self.distance_1:
+                    self.close_people_publisher.publish(1)
+            else:
+                self.close_people_publisher.publish(0)
 
         # passed_time = time.time() - current_time
         self.det_img_publisher.publish(self.bridge.cv2_to_imgmsg(datum.cvOutputData, 'rgb8'))

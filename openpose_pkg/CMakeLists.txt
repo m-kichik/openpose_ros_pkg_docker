@@ -164,6 +164,7 @@ include_directories(
 ## in contrast to setup.py, you can choose the destination
  catkin_install_python(PROGRAMS
    scripts/openpose_node.py
+   scripts/openpose_people_subscriber.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
  )
 
