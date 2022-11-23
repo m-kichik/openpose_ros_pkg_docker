@@ -51,7 +51,7 @@ class OpenPoseNode():
                 'depth_info' : '/realsense_back/depth/camera_info',
             }
         }
-        
+        self.name = topic
         self.topic = topic_names[topic]
 
         self.points_dict = {
@@ -83,14 +83,29 @@ class OpenPoseNode():
 
                 }
         
-        self.important_points = [0, 1, 2, 5, 15, 16, 17, 18]
+        important_points = {
+            'zednode': [0, 1, 2, 5, 15, 16, 17, 18],
+            'back': [3, 4, 6, 7, 8, 9, 12],
+            'gripper': [],
+        }
+        self.important_points = important_points[topic]
 
         rospy.loginfo('OpenPose predictor is ready')
 
         # d_1 - for one human who is too close
         # d_2 - for two and more people when all of them are too close
-        self.distance_1 = 1.
-        self.distance_2 = 2.
+        distance_1 = {
+            'zednode': 1.,
+            'back': 1000.,
+            'gripper': None,
+        }
+        distance_2 = {
+            'zednode': 2.,
+            'back': 1500.,
+            'gripper': None,
+        }
+        self.distance_1 = distance_1[topic]
+        self.distance_2 = distance_2[topic]
 
         self.bridge = CvBridge()
 
@@ -121,7 +136,7 @@ class OpenPoseNode():
 
         self.det_img_publisher = rospy.Publisher('openpose/img_detection', Image, queue_size=10)
 
-        self.close_people_publisher = rospy.Publisher('openpose/close_people', Int16, queue_size=10)
+        self.close_people_publisher = rospy.Publisher('openpose/close_people', String, queue_size=10)
 
         rospy.loginfo('OpenPose node is done')
 
@@ -203,19 +218,17 @@ class OpenPoseNode():
                 if av_depth <= max(self.distance_1, self.distance_2):
                     close_people_dists.append(av_depth)
 
-                # print(pose_3d)
-
         else:
             n_people = 0
 
         if len(close_people_dists) > 1:
-            self.close_people_publisher.publish(2)
+            self.close_people_publisher.publish(f'{self.name[0]}2')
         else:
             if len(close_people_dists) == 1:
                 if close_people_dists[0] <= self.distance_1:
-                    self.close_people_publisher.publish(1)
+                    self.close_people_publisher.publish(f'{self.name[0]}1')
             else:
-                self.close_people_publisher.publish(0)
+                self.close_people_publisher.publish('no_close')
 
         # passed_time = time.time() - current_time
         self.det_img_publisher.publish(self.bridge.cv2_to_imgmsg(datum.cvOutputData, 'rgb8'))

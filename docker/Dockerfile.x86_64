@@ -68,6 +68,9 @@ RUN cmake -DBUILD_PYTHON=ON -DUSE_CUDNN=OFF .. && make -j `nproc`
 #ros message filters
 RUN apt-get install ros-noetic-message-filters
 
+#requests
+RUN pip3 install requests
+
 # add user and his password
 ARG USER=docker_openpose
 ARG UID=1000
