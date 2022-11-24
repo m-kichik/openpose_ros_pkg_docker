@@ -1,0 +1,5 @@
+# request constants
+string camera_name
+---
+# response constants
+string responce
