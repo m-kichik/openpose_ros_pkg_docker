@@ -7,6 +7,7 @@ from std_msgs.msg import String
 
 def tell_n_people(info):
     n_people = info.split()[1]
+    # ping Ilya
     rospy.loginfo(f'Openpose detected {n_people} people')
 
 if __name__ == '__main__':
