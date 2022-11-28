@@ -5,9 +5,11 @@ import argparse
 import rospy
 from std_msgs.msg import String
 
+import requests
+
 def tell_n_people(info):
     n_people = info.split()[1]
-    # ping Ilya
+    requests.get(f'http://localhost:8000/onp/{n_people}')
     rospy.loginfo(f'Openpose detected {n_people} people')
 
 if __name__ == '__main__':
