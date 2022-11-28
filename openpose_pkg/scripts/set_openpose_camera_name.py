@@ -8,7 +8,7 @@ from openpose_pkg.srv import SetCam
 if __name__ == '__main__':
     try:
         parser = argparse.ArgumentParser()
-        parser.add_argument('--camera_name', default='zednode',
+        parser.add_argument('camera_name', default='zednode',
                 help='define name of camera topic for following cameras: zednode, gripper or back')
         args = parser.parse_known_args()
 

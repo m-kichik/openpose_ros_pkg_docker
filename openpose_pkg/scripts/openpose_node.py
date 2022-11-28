@@ -313,12 +313,15 @@ class OpenPoseNode():
 if __name__ == '__main__':
     try:
         parser = argparse.ArgumentParser()
+        parser.add_argument('--net_resolution', default='256x128',
+                help='define openpose net resolution, each of the numbers must be divisible by 16')
         parser.add_argument('--topic', default='zednode',
                 help='define name of camera topic for following cameras: zednode, gripper or back')
         args = parser.parse_known_args()
 
         params = dict()
         params["model_folder"] = "/home/openpose/models/"
+        params["net_resolution"] = args[0].net_resolution
 
         for i in range(0, len(args[1])):
             curr_item = args[1][i]
