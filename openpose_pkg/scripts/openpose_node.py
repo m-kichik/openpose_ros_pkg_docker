@@ -76,13 +76,13 @@ class OpenPoseNode():
 
         self.bridge = CvBridge()
 
-        # define subscribers for all camera topics:
-        self.define_subscribers()
+        # init subscribers for all camera topics:
+        self.init_subscribers()
 
-        # define publishers:
-        self.define_publishers()
+        # init publishers:
+        self.init_publishers()
 
-        # define service for setting camera
+        # init service for setting camera
         self.set_cam_service = rospy.Service('openpose/set_camera_name_service', SetCam, self.set_camera)
 
         rospy.loginfo('OpenPose node is done')
@@ -100,7 +100,7 @@ class OpenPoseNode():
         important_points = {
             'zednode': [0, 1, 2, 5, 15, 16, 17, 18],
             'back': [3, 4, 6, 7, 8, 9, 12],
-            'gripper': [],
+            'gripper': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 15, 16, 17, 18],
         }
 
         self.important_points = important_points[camera_name]
@@ -111,26 +111,26 @@ class OpenPoseNode():
         distance_1 = {
             'zednode': 1.,
             'back': 1000.,
-            'gripper': None,
+            'gripper': 500,
         }
 
         distance_2 = {
             'zednode': 2.,
             'back': 1500.,
-            'gripper': None,
+            'gripper': 1000,
         }
 
         self.distance_1 = distance_1[camera_name]
         self.distance_2 = distance_2[camera_name]
 
-        return f'Successfully set {camera_name} node name'
+        return f'Successfully set {camera_name} camera name'
 
     
-    def define_subscribers(self):
+    def init_subscribers(self):
         # zednode:
 
         zednode_img_subscriber = message_filters.Subscriber(
-            '/zed_node/left/image_rect_color/compressed', CompressedImage
+            '/zed_node/left/image_rect_color/compressed', Image
             )
 
         zednode_depth_subscriber = message_filters.Subscriber(
@@ -150,7 +150,7 @@ class OpenPoseNode():
         # gripper:
 
         gripper_img_subscriber = message_filters.Subscriber(
-            '/realsense_gripper/color/image_raw', CompressedImage
+            '/realsense_gripper/color/image_raw', Image
             )
 
         gripper_depth_subscriber = message_filters.Subscriber(
@@ -170,7 +170,7 @@ class OpenPoseNode():
         # back:
 
         back_img_subscriber = message_filters.Subscriber(
-            '/realsense_back/color/image_raw', CompressedImage
+            '/realsense_back/color/image_raw', Image
             )
 
         back_depth_subscriber = message_filters.Subscriber(
@@ -188,7 +188,7 @@ class OpenPoseNode():
         back_syncronizer.registerCallback(self.back_do_detection)
 
 
-    def define_publishers(self):
+    def init_publishers(self):
         self.det_publisher = rospy.Publisher('openpose/detection', String, queue_size=10)
 
         self.det_img_publisher = rospy.Publisher('openpose/img_detection', Image, queue_size=10)
@@ -196,7 +196,7 @@ class OpenPoseNode():
         self.close_people_publisher = rospy.Publisher('openpose/close_people', String, queue_size=10)
     
     
-    def zednode_do_detection(self, image_msg: CompressedImage, depth_msg: Image, depth_info_msg: CameraInfo):
+    def zednode_do_detection(self, image_msg: Image, depth_msg: Image, depth_info_msg: CameraInfo):
         if self.camera_name == 'zednode':
             self.predict_pose(image_msg, depth_msg, depth_info_msg)
 
@@ -235,14 +235,14 @@ class OpenPoseNode():
             return 0, 0, 0
 
 
-    def predict_pose(self, image_msg: CompressedImage, depth_msg: Image, depth_info_msg: CameraInfo):
+    def predict_pose(self, image_msg: Image, depth_msg: Image, depth_info_msg: CameraInfo):
         rospy.loginfo('Received image')
         current_time = time.time()
 
-        # image = self.bridge.imgmsg_to_cv2(image_msg, 'rgb8')
+        image = self.bridge.imgmsg_to_cv2(image_msg, 'rgb8')
         # image = np.frombuffer(image_msg.data, dtype=np.uint8).reshape(image_msg.height, image_msg.width, -1)
-        np_arr = np.fromstring(image_msg.data, np.uint8)
-        image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        # np_arr = np.fromstring(image_msg.data, np.uint8)
+        # image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
         
         datum = op.Datum()
         datum.cvInputData = image

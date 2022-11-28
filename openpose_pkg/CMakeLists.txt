@@ -167,6 +167,7 @@ include_directories(
    scripts/openpose_node.py
    scripts/openpose_people_subscriber.py
    scripts/set_openpose_camera_name.py
+   scripts/how_many_people.py
    DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
  )
 
