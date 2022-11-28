@@ -4,45 +4,12 @@
 Внутри узла происходит обработка изображения и информации от карты глубин. После этого узел 
 публикует изображение с отрисовкой детекции в топик img_detection.
 
-### Клонирование этого репозитория
-```
-https://github.com/m-kichik/openpose_ros_pkg_docker/
-```
+[Инструкция по сборке этого репозитория лежит здесь](https://github.com/m-kichik/openpose_ros_pkg_docker/blob/master/build.md);
+[Инструкция по запуску openpose_node лежит здесь](https://github.com/m-kichik/openpose_ros_pkg_docker/blob/master/run_openpose_node.md).
 
-### Сборка docker-образа
-```
-cd openpose_ros_pkg_docker/docker
-./build.sh
-```
-
-### Старт контейнера. Обратите внимание, что в файле start.sh для команды docker run указан параметр --net host.
-```
-cd openpose_ros_pkg_docker/docker
-./start.sh
-```
-
-### Попасть в контейнер можно с помощью:
-```
-cd openpose_ros_pkg_docker/docker
-./into.sh
-```
-
-### Остановить контейнер можно с помощью:
-```
-cd openpose_ros_pkg_docker/docker
-./stop.sh
-```
-
-### Внутри контейнера после первого запуска скрипта ```into.sh``` (после запуска ```start.sh``` впервые или после выполнения ```stop.sh```):
-```
-cd catkin_ws
-catkin_make
-```
-
-### Для запуска узла:
-```
-cd catkin_ws/
-source devel/setup.bash
-rosrun openpose_pkg openpose_node.py --net_resolution "-512x256" --topic [zednode/gripper/back]
-```
-Обратите внимание, что выбор топика зависит от имён топиков на вашем устройстве. 
+Для работы с узлом существуют следующие утилиты:
+<ul>
+  <li> [Set openpose camera name (инструкция)](https://github.com/m-kichik/openpose_ros_pkg_docker/blob/master/set_openpose_camera_name.md) </li>
+  <li> [How many people (инструкция)](https://github.com/m-kichik/openpose_ros_pkg_docker/blob/master/how_many_people.md) </li>
+  <li> [Openpose people subscriber (инструкция)](https://github.com/m-kichik/openpose_ros_pkg_docker/blob/master/openpose_people_subscriber.md) </li>
+</ul>
